@@ -196,6 +196,46 @@ curl -X POST https://your-app-url.example.com/chat \
   -d '{"message": "What is Playwright used for in this project?"}'
 ```
 
+## WhatsApp Cloud API Webhook
+
+This app includes WhatsApp Cloud API webhook routes:
+
+- `GET /webhook` verifies your webhook with Meta.
+- `POST /webhook` receives WhatsApp messages and replies with the RAG chatbot answer.
+
+Add these environment variables in your hosting dashboard:
+
+```text
+WHATSAPP_VERIFY_TOKEN=choose_a_private_verify_token
+WHATSAPP_ACCESS_TOKEN=your_meta_whatsapp_access_token
+WHATSAPP_PHONE_NUMBER_ID=your_whatsapp_phone_number_id
+```
+
+Optional WhatsApp environment variable:
+
+```text
+WHATSAPP_API_VERSION=v20.0
+```
+
+Use this callback URL in the Meta developer dashboard:
+
+```text
+https://your-app-url.example.com/webhook
+```
+
+Use the same value for Meta's verify token that you set as `WHATSAPP_VERIFY_TOKEN`.
+
+Webhook flow:
+
+1. Meta sends a verification request to `GET /webhook`.
+2. The app checks `WHATSAPP_VERIFY_TOKEN`.
+3. When a user sends a WhatsApp text message, Meta sends it to `POST /webhook`.
+4. The app extracts the user's message text.
+5. The message is passed into the existing RAG chatbot.
+6. The chatbot reply is sent back through the WhatsApp Cloud API.
+
+Only text messages are handled in this beginner version.
+
 ## Notes
 
 - Run `python3 ingest.py` again whenever you add, remove, or edit documents.

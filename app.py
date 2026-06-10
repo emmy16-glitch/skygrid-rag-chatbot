@@ -1,7 +1,9 @@
 import os
 
+import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import PlainTextResponse
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
@@ -40,6 +42,7 @@ def root():
         "endpoints": {
             "health": "/health",
             "chat": "/chat",
+            "whatsapp_webhook": "/webhook",
         },
     }
 
@@ -120,6 +123,119 @@ def answer_question(question):
 
     # Send the retrieved chunks and question to Gemini for the final answer.
     return ask_llm(question, chunks)
+
+
+def extract_whatsapp_text(payload):
+    """Extract the sender phone number and text from a WhatsApp webhook payload."""
+    try:
+        # WhatsApp sends webhook events inside entry -> changes -> value.
+        value = payload["entry"][0]["changes"][0]["value"]
+
+        # Ignore status callbacks because they do not contain user messages.
+        messages = value.get("messages", [])
+        if not messages:
+            return None, None
+
+        # This beginner version handles the first incoming message only.
+        message = messages[0]
+
+        # The sender's WhatsApp ID is needed so we can send the reply back.
+        sender_phone_number = message.get("from")
+
+        # Only text messages have a text.body field.
+        text = message.get("text", {}).get("body", "")
+
+        return sender_phone_number, text.strip()
+
+    except (KeyError, IndexError, TypeError):
+        # If Meta sends a shape we do not understand, treat it as no message.
+        return None, None
+
+
+def send_whatsapp_message(to_phone_number, reply_text):
+    """Send the chatbot reply back to the user through WhatsApp Cloud API."""
+    # Read WhatsApp settings from environment variables.
+    access_token = os.getenv("WHATSAPP_ACCESS_TOKEN")
+    phone_number_id = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
+
+    # Stop with a clear error if deployment variables are missing.
+    if not access_token:
+        raise ValueError("WHATSAPP_ACCESS_TOKEN is not set.")
+    if not phone_number_id:
+        raise ValueError("WHATSAPP_PHONE_NUMBER_ID is not set.")
+
+    # The API version can be changed without editing code if Meta updates it.
+    api_version = os.getenv("WHATSAPP_API_VERSION", "v20.0")
+
+    # This is the WhatsApp Cloud API endpoint for sending messages.
+    url = f"https://graph.facebook.com/{api_version}/{phone_number_id}/messages"
+
+    # Meta expects a bearer token for authorization.
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+    }
+
+    # This sends a simple text reply to the same WhatsApp user.
+    data = {
+        "messaging_product": "whatsapp",
+        "to": to_phone_number,
+        "type": "text",
+        "text": {"body": reply_text},
+    }
+
+    # Make the HTTP request to Meta's Graph API.
+    response = httpx.post(url, headers=headers, json=data, timeout=30)
+
+    # Raise an error if Meta rejects the request.
+    response.raise_for_status()
+
+    return response.json()
+
+
+@api.get("/webhook", response_class=PlainTextResponse)
+def verify_whatsapp_webhook(
+    mode: str = Query(default="", alias="hub.mode"),
+    token: str = Query(default="", alias="hub.verify_token"),
+    challenge: str = Query(default="", alias="hub.challenge"),
+):
+    """Verify the webhook URL when setting it up in Meta."""
+    # Meta sends hub.mode=subscribe when verifying a webhook.
+    expected_token = os.getenv("WHATSAPP_VERIFY_TOKEN")
+
+    # The token from Meta must match the token in our environment variables.
+    if mode == "subscribe" and token == expected_token:
+        return challenge
+
+    # Return 403 if the verify token is missing or incorrect.
+    raise HTTPException(status_code=403, detail="Webhook verification failed.")
+
+
+@api.post("/webhook")
+async def receive_whatsapp_message(request: Request):
+    """Receive WhatsApp messages, answer with RAG, and send the reply back."""
+    # Read the raw webhook JSON sent by Meta.
+    payload = await request.json()
+
+    # Pull the sender phone number and message text out of Meta's nested payload.
+    sender_phone_number, user_message = extract_whatsapp_text(payload)
+
+    # Some webhook events are delivery statuses, not user messages.
+    if not sender_phone_number or not user_message:
+        return {"status": "ignored"}
+
+    try:
+        # Reuse the same RAG function used by /chat.
+        chatbot_reply = answer_question(user_message)
+
+        # Send the chatbot answer back to the WhatsApp user.
+        send_whatsapp_message(sender_phone_number, chatbot_reply)
+
+        return {"status": "sent"}
+
+    except Exception as error:
+        # Return a clear API error if Gemini, ChromaDB, or WhatsApp fails.
+        raise HTTPException(status_code=500, detail=str(error)) from error
 
 
 @api.post("/chat", response_model=ChatResponse)
