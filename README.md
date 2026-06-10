@@ -106,6 +106,12 @@ The API will run at:
 http://127.0.0.1:8001
 ```
 
+Open the root endpoint to see the welcome message and available endpoints:
+
+```bash
+curl http://127.0.0.1:8001/
+```
+
 Send a chat request:
 
 ```bash
@@ -175,9 +181,10 @@ Before deployment, run ingestion locally or during your deployment setup so `chr
 python3 ingest.py
 ```
 
-After deployment, test the public health endpoint:
+After deployment, test the public root and health endpoints:
 
 ```bash
+curl https://your-app-url.example.com/
 curl https://your-app-url.example.com/health
 ```
 

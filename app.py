@@ -31,6 +31,19 @@ class ChatResponse(BaseModel):
     reply: str
 
 
+@api.get("/")
+def root():
+    """Return a friendly welcome message and list the main API endpoints."""
+    # This helps users confirm the API is running when they open it in a browser.
+    return {
+        "message": "Welcome to SkyGrid RAG Chatbot API.",
+        "endpoints": {
+            "health": "/health",
+            "chat": "/chat",
+        },
+    }
+
+
 @api.get("/health")
 def health_check():
     """Return a simple status so hosting platforms know the API is alive."""
