@@ -1,0 +1,26 @@
+SkyGrid RAG Chatbot is a beginner-friendly Python project.
+
+The chatbot uses Retrieval-Augmented Generation, also called RAG.
+RAG helps a chatbot answer questions using information from documents.
+
+In this project, text documents are placed inside the documents folder.
+The ingestion script reads .txt and .md files from that folder.
+It splits the documents into smaller chunks so they are easier to search.
+
+Gemini creates embeddings for each document chunk.
+An embedding is a list of numbers that represents the meaning of text.
+ChromaDB stores those embeddings locally on the computer.
+
+When a user asks a question, the retriever creates a Gemini embedding for the question.
+ChromaDB compares the question embedding with the stored document embeddings.
+It returns the most relevant document chunks.
+
+The chatbot sends the retrieved chunks and the user question to Gemini.
+Gemini writes an answer using the retrieved context.
+
+The main project files are app.py, ingest.py, retriever.py, requirements.txt, and README.md.
+The app.py file runs the terminal chatbot.
+The ingest.py file builds the local knowledge base.
+The retriever.py file searches for relevant document chunks.
+
+This project is named SkyGrid RAG Chatbot.
